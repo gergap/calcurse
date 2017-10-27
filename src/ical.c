@@ -224,39 +224,94 @@ static void ical_export_recur_apoints(FILE * stream, int export_uid)
 	LLIST_TS_UNLOCK(&recur_alist_p);
 }
 
+/**
+ * Prints \c text escaped according to RFC 5545.
+ * This also wraps lines at 75 chars.
+ *
+ * @code
+ * ESCAPED-CHAR = ("\\" / "\;" / "\," / "\N" / "\n")
+ *    ; \\ encodes \, \N or \n encodes newline
+ *    ; \; encodes ;, \, encodes ,
+ * @endcode
+ *
+ * @param stream
+ * @param text
+ */
+static void print_escaped(FILE *stream, const char *text, int init_col)
+{
+    char c;
+    int col = init_col;
+
+    while ((c = *text++)) {
+	switch(c) {
+	case '\\':
+	    fputs("\\\\", stream);
+	    col++;
+	    break;
+	case ';':
+	    fputs("\\;", stream);
+	    col++;
+	    break;
+	case ',':
+	    fputs("\\,", stream);
+	    col++;
+	    break;
+	case '\n':
+	    fputs("\\n", stream);
+	    col++;
+	    break;
+	default:
+	    fputc(c, stream);
+	    break;
+	}
+	col++;
+	if (col >= 75) {
+	    fputs("\n ", stream);
+	    col = 1;
+	}
+    }
+}
+
 /* Export appointments. */
 static void ical_export_apoints(FILE * stream, int export_uid)
 {
-	llist_item_t *i;
-	char ical_datetime[BUFSIZ];
+    llist_item_t *i;
+    char ical_datetime[BUFSIZ];
+    char note[4096];
 
-	LLIST_TS_LOCK(&alist_p);
-	LLIST_TS_FOREACH(&alist_p, i) {
-		struct apoint *apt = LLIST_TS_GET_DATA(i);
-		date_sec2date_fmt(apt->start, ICALDATETIMEFMT,
-				  ical_datetime);
-		fputs("BEGIN:VEVENT\n", stream);
-		fprintf(stream, "DTSTART:%s\n", ical_datetime);
-		if (apt->dur > 0) {
-			fprintf(stream, "DURATION:P%ldDT%ldH%ldM%ldS\n",
-				apt->dur / DAYINSEC,
-				(apt->dur / HOURINSEC) % DAYINHOURS,
-				(apt->dur / MININSEC) % HOURINMIN,
-				apt->dur % MININSEC);
-		}
-		fprintf(stream, "SUMMARY:%s\n", apt->mesg);
-		if (apt->state & APOINT_NOTIFY)
-			ical_export_valarm(stream);
-
-		if (export_uid) {
-			char *hash = apoint_hash(apt);
-			fprintf(stream, "UID:%s\n", hash);
-			mem_free(hash);
-		}
-
-		fputs("END:VEVENT\n", stream);
+    LLIST_TS_LOCK(&alist_p);
+    LLIST_TS_FOREACH(&alist_p, i) {
+	struct apoint *apt = LLIST_TS_GET_DATA(i);
+	date_sec2date_fmt(apt->start, ICALDATETIMEFMT,
+		ical_datetime);
+	fputs("BEGIN:VEVENT\n", stream);
+	fprintf(stream, "DTSTART:%s\n", ical_datetime);
+	if (apt->dur > 0) {
+	    fprintf(stream, "DURATION:P%ldDT%ldH%ldM%ldS\n",
+		    apt->dur / DAYINSEC,
+		    (apt->dur / HOURINSEC) % DAYINHOURS,
+		    (apt->dur / MININSEC) % HOURINMIN,
+		    apt->dur % MININSEC);
 	}
-	LLIST_TS_UNLOCK(&alist_p);
+	fprintf(stream, "SUMMARY:%s\n", apt->mesg);
+	if (apt->state & APOINT_NOTIFY)
+	    ical_export_valarm(stream);
+	if (apt->note) {
+	    read_note_contents(apt->note, note, sizeof(note));
+	    fprintf(stream, "DESCRIPTION:");
+	    print_escaped(stream, note, strlen("DESCRIPTION:"));
+	    fprintf(stream, "\n");
+	}
+
+	if (export_uid) {
+	    char *hash = apoint_hash(apt);
+	    fprintf(stream, "UID:%s\n", hash);
+	    mem_free(hash);
+	}
+
+	fputs("END:VEVENT\n", stream);
+    }
+    LLIST_TS_UNLOCK(&alist_p);
 }
 
 /* Export todo items. */

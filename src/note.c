@@ -74,6 +74,31 @@ char *generate_note(const char *str)
 	return sha1;
 }
 
+/** Reads the content of the note identified by it's \c hash.
+ * @param hash A string containing the note's hash.
+ * @param buffer Buffer receiving the note contents.
+ * @param size Size of \c buffer in bytes.
+ * @return Number of bytes read.
+ */
+int read_note_contents(const char *hash, char *buffer, size_t size)
+{
+	char *notepath;
+	FILE *fp;
+	int ret = 0;
+
+	asprintf(&notepath, "%s%s", path_notes, hash);
+	fp = fopen(notepath, "r");
+	EXIT_IF(fp == NULL, _("Warning: could not open %s, Aborting..."),
+		notepath);
+	ret = fread(buffer, 1, size - 1, fp);
+	file_close(fp, __FILE_POS__);
+
+	mem_free(notepath);
+
+	buffer[ret] = 0;
+	return ret;
+}
+
 /* Edit a note with an external editor. */
 void edit_note(char **note, const char *editor)
 {

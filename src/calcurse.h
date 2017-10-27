@@ -944,6 +944,7 @@ void mem_stats(void);
 
 /* note.c */
 char *generate_note(const char *);
+int read_note_contents(const char *hash, char *buffer, size_t size);
 void edit_note(char **, const char *);
 void view_note(const char *, const char *);
 void erase_note(char **);
